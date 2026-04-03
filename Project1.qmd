@@ -1,7 +1,9 @@
 ---
 title: "Project 1"
 author: "Faran Igani"
-format: html
+format:
+  html:
+    embed-resources: true
 editor: visual
 ---
 
