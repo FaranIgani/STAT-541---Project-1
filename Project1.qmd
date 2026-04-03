@@ -1,26 +1,68 @@
 ---
 title: "Project 1"
+author: "Faran Igani"
 format: html
 editor: visual
 ---
 
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+## Packages and Data
 
 ```{r}
-1 + 1
+library(tidyverse)
 ```
-
-You can add options to executable code like this
 
 ```{r}
-#| echo: false
-2 * 2
+#| label: Get the Data
+
+# Read in with tidytuesdayR package 
+# Install from CRAN via: install.packages("tidytuesdayR")
+# This loads the readme and all the datasets for the week of interest
+
+# Either ISO-8601 date or year/week works!
+
+#tuesdata <- tidytuesdayR::tt_load('2021-01-26')
+tuesdata <- tidytuesdayR::tt_load(2021, week = 5)
+
+#plastics <- tuesdata$plastics
+
+# Or read in the data manually
+
+plastics <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2021/2021-01-26/plastics.csv')
+
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+```{r}
+#View(plastics)
+```
+
+## Checkpoint #1
+
+-   describes the context of the data
+
+This dataset comes from global plastic waste cleanup efforts, where volunteers collect and categorize plastic items found in the environment. Each row in data represents a cleanup outcome for a specific country, year (2019 or 2020), and the parent company (whats the source of plastic).
+
+The data records counts of different types of plastic materials collected, including categories such as HDPE (High density polyethylene count), LDPE (Low density), Polyester (PET), polypropylene, polystyrene, and PVC.In addition, the dataset includes:
+
+A “parent_company” variable identifying the brand or labeling the plastic (e.g., Coca-Cola, PepsiCo, or Unbranded). A “grand_total” representing total plastic items collected for that group. Measures of cleanup effort, including number of events and volunteers
+
+With this dataset, we are able to look and study how plastic pollution varies by company, material type, geography, and time.
+
+-   explains what cleaning has been done to the data
+
+The data was cleaned by first combining multiple country-level CSV files for each year into a single dataset using row-binding. Column types were explicitly specified to ensure consistency across files, with categorical variables stored as character and count variables as numeric. A year variable was added to distinguish observations from 2019 and 2020. The grand total variable was converted from character to numeric using a parsing function, parse_number(), to remove punctuation. Names were also converted to lowercase. The 2019 data required additional cleaning to resolve inconsistencies, including extracting country names from file names, renaming variables to match the 2020 structure, and combining duplicated columns (e.g., pp and pp_2, ps and ps_2). After merging duplicate columns, the redundant variables were removed. These steps resulted in a unified dataset with consistent structure across both years.
+
+-   poses **at least two** research questions that could be addressed with these data
+
+How has plastic waste changed over time? From 2019 to 2020.
+
+Which parent companies contribute the most to total plastic waste within each country?
+
+-   poses **at least two** research questions that could be addressed using supplemental data
+
+How does plastic waste per country relate to population size or GDP? Need population dataset
+
+Is plastic pollution associated with product sales? Look at company's sales for each country
+
+-   sketches out two visualizations that could be made to address the research questions you posed above
+
+![Visuals](twoplots.jpg)
