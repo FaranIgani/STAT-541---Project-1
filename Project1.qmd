@@ -5,6 +5,9 @@ format:
   html:
     embed-resources: true
 editor: visual
+execute:
+  warning: false
+  message: false
 ---
 
 ## Packages and Data
