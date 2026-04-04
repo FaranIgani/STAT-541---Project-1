@@ -53,6 +53,8 @@ With this dataset, we are able to look and study how plastic pollution varies by
 
 The data was cleaned by first combining multiple country-level CSV files for each year into a single dataset using row-binding. Column types were explicitly specified to ensure consistency across files, with categorical variables stored as character and count variables as numeric. A year variable was added to distinguish observations from 2019 and 2020. The grand total variable was converted from character to numeric using a parsing function, parse_number(), to remove punctuation. Names were also converted to lowercase. The 2019 data required additional cleaning to resolve inconsistencies, including extracting country names from file names, renaming variables to match the 2020 structure, and combining duplicated columns (e.g., pp and pp_2, ps and ps_2). After merging duplicate columns, the redundant variables were removed. These steps resulted in a unified dataset with consistent structure across both years.
 
+On top of the data cleaning done as preparation, there were some observations with missing data. In many of the cases, plastic was all classified under "other", which provides an incorrect split of plastic types. This proves problematic for visualizing things like the split of plastic types because these plastics are almost certainly classified incorrectly. It would be misleading sense to replace these with zeros if interested in plastic types, so instead we likely have to drop these rows to maintain correctness.
+
 -   poses **at least two** research questions that could be addressed with these data
 
 How has plastic waste changed over time? From 2019 to 2020.
@@ -67,4 +69,4 @@ Is plastic pollution associated with product sales? Look at company's sales for 
 
 -   sketches out two visualizations that could be made to address the research questions you posed above
 
-![Visuals](twoplots.jpg)
+![](twoplots.jpg) ![Visuals](plots.jpg)
