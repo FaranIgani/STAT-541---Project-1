@@ -1,0 +1,248 @@
+---
+title: "Project 1-Checkpoint2"
+author: "Faran Igani"
+format:
+  html:
+    embed-resources: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+## Packages and Data
+
+```{r}
+#| label: Load packages 
+library(tidyverse)
+library(gt)
+```
+
+```{r}
+#| label: Load the Data
+plastics <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2021/2021-01-26/plastics.csv')
+```
+
+## Checkpoint 2
+
+-   **Two** data summaries that use existing (unmodified) columns in the data
+
+-   **Two** data summaries that modify columns from the original data
+
+**Table 1: Average plastic collected, number of events, and volunteers by year**
+
+```{r}
+#| label: Unmodified custom function
+summarize_effort <- function(data) {
+  data %>%
+    group_by(year) %>%
+    summarise(
+        avg_grand_total = round(mean(grand_total, na.rm = TRUE), 3),
+        avg_num_events = round(mean(num_events, na.rm = TRUE), 3),
+        avg_volunteers = round(mean(volunteers, na.rm = TRUE), 3),
+      .groups = "drop"
+    )
+}
+
+summary_existing_1 <- summarize_effort(plastics)
+
+colnames(summary_existing_1) <- c("Year", "Avg Total Plastic", "Avg Events", "Avg Volunteers")
+
+```
+
+```{r}
+#| label: table1 w/ gt
+
+table1 <- summary_existing_1 |>
+  gt()
+
+table1 <- table1 |>
+  cols_label(
+    Year = md("**Year**"),
+    `Avg Total Plastic` = md("**Avg Total Plastic**"),
+    `Avg Events` = md("**Avg Events**"),
+    `Avg Volunteers` = md("**Avg Volunteers**")
+  ) |>
+  fmt_number(
+    columns = c(`Avg Total Plastic`, `Avg Events`, `Avg Volunteers`),
+    decimals = 2
+  ) |>
+  tab_header(
+    title = md("**Table 1: Summary of Cleanup Effort by Year**")
+  ) |>
+  tab_source_note(
+    source_note = "Average total plastic collected, number of events, and volunteers by year."
+  )
+
+table1
+```
+
+**Table 2: Top 10 parent companies by grand total plastic within each year**
+
+```{r}
+#| label: Unmodified iteration
+top_companies <- plastics %>%
+  filter(
+    parent_company != "Grand Total",
+    !is.na(parent_company),
+    parent_company != "null",
+    parent_company != "NULL"
+  ) %>%
+  group_by(year, parent_company) %>%
+  summarise(total_plastic = sum(grand_total, na.rm = TRUE), .groups = "drop") %>%
+  arrange(year, desc(total_plastic)) %>%
+  group_by(year) %>%
+  slice_head(n = 10)
+
+colnames(top_companies) <- c( "Year" ,"Parent Company","Total Plastic")
+
+# with cable
+# knitr::kable(
+#   summary_existing_1,
+#   caption = "Table 2: Top contributing parent companies ranked by total plastic collected within each year."
+# )
+```
+
+```{r}
+#| label: table2 w/ gt
+
+table2 <- top_companies |>
+  gt()
+
+table2 <- table2 |>
+  cols_label(
+    Year = md("**Year**"),
+    `Parent Company` = md("**Parent Company**"),
+    `Total Plastic` = md("**Total Plastic**")
+  ) |>
+  fmt_number(
+    columns = c(`Total Plastic`),
+    decimals = 0
+  ) |>
+  tab_header(
+    title = md("**Table 2: Top Parent Companies by Total Plastic Collected**")
+  ) |>
+  tab_source_note(
+    source_note = "Top 10 parent companies by total plastic collected within each year, excluding missing and aggregate entries."
+  )
+
+table2
+```
+
+**Table 3:** **Proportion of each plastic type by year**
+
+```{r}
+#| label: Modified custom function
+plastic_props_year <- function(data) {
+  
+  data %>%
+    filter(grand_total > 0, parent_company != "Grand Total") %>%
+    group_by(year) %>%
+    summarise(
+      empty_prop = sum(empty, na.rm = TRUE) / sum(grand_total, na.rm = TRUE),
+      hdpe_prop  = sum(hdpe,  na.rm = TRUE) / sum(grand_total, na.rm = TRUE),
+      ldpe_prop  = sum(ldpe,  na.rm = TRUE) / sum(grand_total, na.rm = TRUE),
+      other_prop = sum(o,     na.rm = TRUE) / sum(grand_total, na.rm = TRUE),
+      pet_prop   = sum(pet,   na.rm = TRUE) / sum(grand_total, na.rm = TRUE),
+      pp_prop    = sum(pp,    na.rm = TRUE) / sum(grand_total, na.rm = TRUE),
+      ps_prop    = sum(ps,    na.rm = TRUE) / sum(grand_total, na.rm = TRUE),
+      pvc_prop   = sum(pvc,   na.rm = TRUE) / sum(grand_total, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    rename(Year = year)
+}
+
+table3_year <- plastic_props_year(plastics)
+```
+
+```{r}
+#| label: table3 w/ gt
+
+table3 <- table3_year |>
+  gt()
+
+table3 <- table3 |>
+  cols_label(
+    Year = md("**Year**"),
+    empty_prop = md("**Empty (%)**"),
+    hdpe_prop  = md("**HDPE (%)**"),
+    ldpe_prop  = md("**LDPE (%)**"),
+    other_prop = md("**Other (%)**"),
+    pet_prop   = md("**PET (%)**"),
+    pp_prop    = md("**PP (%)**"),
+    ps_prop    = md("**PS (%)**"),
+    pvc_prop   = md("**PVC (%)**")
+  ) |>
+  fmt_percent(
+    columns = c(empty_prop, hdpe_prop, ldpe_prop, other_prop,
+                pet_prop, pp_prop, ps_prop, pvc_prop),
+    decimals = 1
+  ) |>
+  tab_header(
+    title = md("**Table 3: Proportion of Each Plastic Type by Year**")
+  ) |>
+  tab_source_note(
+    source_note = "Percentages of each plastic type as a percentage of total plastic collected, by year."
+  )
+
+table3
+
+```
+
+**Table 4: Total plastic counts by type and year**
+
+```{r}
+#| label: Modified iteration
+
+plastic_long <- plastics %>%
+  pivot_longer(
+    cols = c(empty, hdpe, ldpe, o, pet, pp, ps, pvc),
+    names_to = "plastic_type",
+    values_to = "count"
+  )
+
+years <- sort(unique(plastics$year))
+
+plastic_summary <- map_dfr(years, function(y) {
+  plastic_long %>%
+    filter(year == y, parent_company != "Grand Total") %>%
+    group_by(plastic_type) %>%
+    summarise(total_count = sum(count, na.rm = TRUE), .groups = "drop") %>%
+    mutate(year = y)%>%
+    arrange(desc(total_count))
+})
+
+
+colnames(plastic_summary) <- c("Plastic Type", "Total Count","Year")
+
+```
+
+```{r}
+#| label: table4 w/ gt
+
+plastic_summary <- plastic_summary %>%
+  select(Year, `Plastic Type`, `Total Count`)
+
+table4 <- plastic_summary |>
+  gt()
+
+table4 <- table4 |>
+  cols_label(
+    `Plastic Type` = md("**Plastic Type**"),
+    `Total Count` = md("**Total Count**"),
+    Year = md("**Year**")
+  ) |>
+  fmt_number(
+    columns = c(`Total Count`),
+    decimals = 0
+  ) |>
+  tab_header(
+    title = md("**Table 4: Total Plastic Counts by Plastic Type and Year**")
+  ) |>
+  tab_source_note(
+    source_note = "Total plastic counts by plastic type and year after reshaping the data into long format."
+  )
+
+table4
+
+```
