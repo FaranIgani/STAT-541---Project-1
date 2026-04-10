@@ -5,6 +5,7 @@ format:
   html:
     embed-resources: true
 editor: visual
+code-tools: true
 execute:
   warning: false
   message: false
@@ -77,56 +78,64 @@ table1 <- table1 |>
 table1
 ```
 
-**Table 2: Top 10 parent companies by grand total plastic within each year**
+**Table 2: Dominant Plastic Type Recorded in Top 10 Waste-Producing Countries**
 
 ```{r}
 #| label: Unmodified iteration
-top_companies <- plastics %>%
-  filter(
-    parent_company != "Grand Total",
-    !is.na(parent_company),
-    parent_company != "null",
-    parent_company != "NULL"
-  ) %>%
-  group_by(year, parent_company) %>%
-  summarise(total_plastic = sum(grand_total, na.rm = TRUE), .groups = "drop") %>%
-  arrange(year, desc(total_plastic)) %>%
-  group_by(year) %>%
-  slice_head(n = 10)
+plastic_types <- c("hdpe", "ldpe", "o", "pet", "pp", "ps", "pvc")
 
-colnames(top_companies) <- c( "Year" ,"Parent Company","Total Plastic")
-
-# with cable
-# knitr::kable(
-#   summary_existing_1,
-#   caption = "Table 2: Top contributing parent companies ranked by total plastic collected within each year."
-# )
-```
-
-```{r}
-#| label: table2 w/ gt
-
-table2 <- top_companies |>
-  gt()
-
-table2 <- table2 |>
-  cols_label(
-    Year = md("**Year**"),
-    `Parent Company` = md("**Parent Company**"),
-    `Total Plastic` = md("**Total Plastic**")
-  ) |>
-  fmt_number(
-    columns = c(`Total Plastic`),
-    decimals = 0
-  ) |>
-  tab_header(
-    title = md("**Table 2: Top Parent Companies by Total Plastic Collected**")
-  ) |>
-  tab_source_note(
-    source_note = "Top 10 parent companies by total plastic collected within each year, excluding missing and aggregate entries."
+dominant_plastic <- function(ctry) {
+  df <- plastics %>%
+    filter(country != "EMPTY") %>%
+    mutate(country = str_to_title(country)) %>%   # match the casing
+    filter(country == ctry) %>%
+    summarise(across(all_of(plastic_types), ~ sum(.x, na.rm = TRUE)))
+  
+  tibble(
+    country       = ctry,
+    dominant_type = plastic_types[which.max(df)],
+    dominant_n    = max(df)
   )
+}
 
-table2
+top_countries <- plastics %>%
+  filter(country != "EMPTY") %>% 
+  mutate(country = str_to_title(country)) %>% 
+  group_by(country) %>%
+  summarise(total = sum(grand_total, na.rm = TRUE)) %>%
+  slice_max(total, n = 10) %>%
+  pull(country)
+
+top_countries %>%
+  map(dominant_plastic) %>%
+  list_rbind() %>%
+  arrange(desc(dominant_n)) %>%
+  mutate(dominant_type = dominant_type %>% 
+           recode_values(
+             "o" ~ "Other", 
+             "ldpe" ~ "Low-Density Polyethylene",
+             "hdpe" ~ "High-Density Polyethylene",
+             "pet" ~ "Polyester",
+             "pp" ~ "Polypropylene",
+             "ps" ~ "Polystyrene",
+             "pvc" ~ "PVC")
+  ) %>% 
+  gt() %>%
+  tab_header(title = "Table 2: Dominant Plastic Type Recorded in Top 10 Waste-Producing Countries") %>%
+  cols_label(
+    country       = "Country",
+    dominant_type = "Dominant Plastic Type",
+    dominant_n    = "Amount of Dominant Plastic"
+  ) %>%
+  tab_style(
+    style     = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  ) %>%
+  fmt_number(columns = dominant_n, decimals = 0) %>%
+  tab_source_note(
+    source_note = "Plastic waste contributed to top 10 counties from the most 
+    dominant plastic type."
+  )
 ```
 
 **Table 3:** **Proportion of each plastic type by year**
@@ -189,60 +198,53 @@ table3
 
 ```
 
-**Table 4: Total plastic counts by type and year**
+**Table 4: Parent Company that Contributes the Most Recorded Waste in Each Country**
 
 ```{r}
-#| label: Modified iteration
+#| label: Modified iteration 
+top_company_by_country <- function(ctry) {
+  clean <- plastics %>% 
+    filter(country == ctry) %>% 
+    filter(!is.na(parent_company),
+           !(parent_company %in% c("Grand Total", "null", "Unbranded")))
+  
+  country_total <- clean %>% 
+  summarise(total = sum(grand_total, na.rm = TRUE)) %>% 
+  pull(total)
+  
+  clean %>% 
+    group_by(parent_company) %>% 
+    summarise(total = sum(grand_total, na.rm = TRUE)) %>% 
+    slice_max(total, n = 1) %>% 
+    mutate(country = ctry,
+           percent = total / country_total)
+}
 
-plastic_long <- plastics %>%
-  pivot_longer(
-    cols = c(empty, hdpe, ldpe, o, pet, pp, ps, pvc),
-    names_to = "plastic_type",
-    values_to = "count"
-  )
+countries <- plastics %>% 
+  distinct(country) %>%
+  pull(country)
 
-years <- sort(unique(plastics$year))
-
-plastic_summary <- map_dfr(years, function(y) {
-  plastic_long %>%
-    filter(year == y, parent_company != "Grand Total") %>%
-    group_by(plastic_type) %>%
-    summarise(total_count = sum(count, na.rm = TRUE), .groups = "drop") %>%
-    mutate(year = y)%>%
-    arrange(desc(total_count))
-})
-
-
-colnames(plastic_summary) <- c("Plastic Type", "Total Count","Year")
-
-```
-
-```{r}
-#| label: table4 w/ gt
-
-plastic_summary <- plastic_summary %>%
-  select(Year, `Plastic Type`, `Total Count`)
-
-table4 <- plastic_summary |>
-  gt()
-
-table4 <- table4 |>
+countries %>% 
+  map(top_company_by_country) %>% 
+  list_rbind() %>% 
+  select(country, parent_company, percent) %>% 
+  gt() %>% 
   cols_label(
-    `Plastic Type` = md("**Plastic Type**"),
-    `Total Count` = md("**Total Count**"),
-    Year = md("**Year**")
-  ) |>
-  fmt_number(
-    columns = c(`Total Count`),
-    decimals = 0
-  ) |>
-  tab_header(
-    title = md("**Table 4: Total Plastic Counts by Plastic Type and Year**")
-  ) |>
+    country        = "Country",
+    parent_company = "Parent Company",
+    percent        = "Percent"
+  ) %>% 
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  ) %>% 
+  fmt_percent(columns = percent, decimals = 2) %>% 
+  tab_caption(
+    caption = md("Table 4: Parent Company that Contributes 
+                 the Most Recorded Waste in Each Country")
+  )%>%
   tab_source_note(
-    source_note = "Total plastic counts by plastic type and year after reshaping the data into long format."
+    source_note = "Parent company that contributes 
+                 the most plastic waste as a perctange for each country."
   )
-
-table4
-
 ```
