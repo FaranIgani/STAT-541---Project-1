@@ -1,6 +1,6 @@
 ---
 title: "Project 1-Checkpoint2"
-author: "Faran Igani"
+author: "Faran Igani and Tyler Stoen"
 format:
   html:
     embed-resources: true
@@ -17,11 +17,17 @@ execute:
 #| label: Load packages 
 library(tidyverse)
 library(gt)
+
 ```
 
 ```{r}
 #| label: Load the Data
 plastics <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2021/2021-01-26/plastics.csv')
+```
+
+```{r}
+#Github URL
+#https://github.com/FaranIgani/STAT-541---Project-1
 ```
 
 ## Checkpoint 2
@@ -133,8 +139,7 @@ top_countries %>%
   ) %>%
   fmt_number(columns = dominant_n, decimals = 0) %>%
   tab_source_note(
-    source_note = "Plastic waste contributed to top 10 counties from the most 
-    dominant plastic type."
+    source_note = "Dominant plastic type recorded among the top 10 waste-producing countries, based on the highest count of plastic items collected during cleanup events."
   )
 ```
 
@@ -191,7 +196,7 @@ table3 <- table3 |>
     title = md("**Table 3: Proportion of Each Plastic Type by Year**")
   ) |>
   tab_source_note(
-    source_note = "Percentages of each plastic type as a percentage of total plastic collected, by year."
+    source_note = "Percentages of each plastic type as a percentage of total plastic collected by year."
   )
 
 table3
@@ -221,12 +226,14 @@ top_company_by_country <- function(ctry) {
 }
 
 countries <- plastics %>% 
+  filter(country != "EMPTY") %>% 
   distinct(country) %>%
   pull(country)
 
 countries %>% 
   map(top_company_by_country) %>% 
   list_rbind() %>% 
+  filter(!is.nan(percent)) %>%
   select(country, parent_company, percent) %>% 
   gt() %>% 
   cols_label(
@@ -239,12 +246,11 @@ countries %>%
     locations = cells_column_labels()
   ) %>% 
   fmt_percent(columns = percent, decimals = 2) %>% 
-  tab_caption(
-    caption = md("Table 4: Parent Company that Contributes 
-                 the Most Recorded Waste in Each Country")
-  )%>%
+  tab_header(
+    title = md("**Table 4: Company Contributing
+                 the Most Recorded Waste by Country**")
+  ) %>% 
   tab_source_note(
-    source_note = "Parent company that contributes 
-                 the most plastic waste as a perctange for each country."
+    source_note = "Parent company with the largest number of recorded waste items in each country." 
   )
 ```
