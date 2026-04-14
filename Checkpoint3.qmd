@@ -1,0 +1,278 @@
+---
+title: "Project 1 Checkpoint 3"
+author: "Faran Igani and Tyler Stoen"
+format:
+  html:
+    embed-resources: true
+editor: visual
+code-tools: true
+execute:
+  warning: false
+  message: false
+---
+
+## Packages and Data
+
+```{r}
+#| label: Load packages 
+library(tidyverse)
+library(gt)
+library(rvest)
+library(ggplot2)
+library(dplyr)
+library(httr2)
+library(jsonlite)
+```
+
+```{r}
+#| label: Load the Data
+plastics <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2021/2021-01-26/plastics.csv')
+```
+
+```{r}
+#Github URL
+#https://github.com/FaranIgani/STAT-541---Project-1
+```
+
+## Checkpoint 3
+
+-   **two** new country-level data sources, One acquired using APIs, the other using webscraping.
+
+-   descriptions of each of the new datasets
+
+-   a “meta” dataset containing **all** the acquired data (joined together)
+
+-   **at least two** data summaries OR visualizations incorporating the additional country-level data
+
+## New data
+
+```{r}
+#| label: API, World Bank  API
+
+base_url <- "https://api.worldbank.org/v2/country/all/indicator/"
+
+pop_code <- "SP.POP.TOTL"
+gdp_code <- "NY.GDP.MKTP.CD"
+
+pop_url <- str_c(base_url, pop_code, "?format=json&per_page=20000")
+gdp_url <- str_c(base_url, gdp_code, "?format=json&per_page=20000")
+```
+
+```{r}
+#| label: request
+pop_raw <- request(pop_url) |>
+  req_perform() |>
+  resp_body_string() |>
+  fromJSON(flatten = TRUE)
+
+gdp_raw <- request(gdp_url) |>
+  req_perform() |>
+  resp_body_string() |>
+  fromJSON(flatten = TRUE)
+```
+
+```{r}
+#| label: get data and combine
+pop_data <- pop_raw[[2]] |>
+  as_tibble() |>
+  transmute(
+    country = country.value,
+    year = as.numeric(date),
+    population = as.numeric(value)
+  ) |>
+  filter(year %in% c(2019, 2020))
+
+gdp_data <- gdp_raw[[2]] |>
+  as_tibble() |>
+  transmute(
+    country = country.value,
+    year = as.numeric(date),
+    gdp = as.numeric(value)
+  ) |>
+  filter(year %in% c(2019, 2020))
+
+wb_data <- pop_data |>
+  inner_join(gdp_data, by = c("country", "year"))
+```
+
+The first supplemental dataset was obtained using the World Bank API through the `WDI` R package. This dataset includes country-level indicators such as total population and gross domestic product (GDP) for the years 2019 and 2020. These variables provide measures of country size and economic development, which can be used to examine whether plastic waste generation is associated with population or economic activity. The dataset is structured at the country-year level, allowing it to be merged directly with the plastics dataset using country and year as keys.
+
+```{r}
+#| label: Webscraping, Wiki population
+url <- "https://en.wikipedia.org/wiki/List_of_countries_by_average_yearly_temperature"
+
+temp_data <- read_html(url) %>%
+  html_table(fill = TRUE)
+
+temp_data <- temp_data[[1]]
+
+#or
+# url <- "https://en.wikipedia.org/wiki/World_Tourism_rankings"
+# tour_data <- read_html(url) %>%
+#   html_table(fill = TRUE)
+# tour_data <- tour_data[[1]]  # first table (arrivals)
+```
+
+The second supplemental dataset was obtained through web scraping from Wikipedia, specifically a table containing average annual temperatures by country. The data were extracted using the `rvest` package in R. This dataset provides environmental context by capturing climate conditions, which may influence patterns of plastic usage and waste accumulation. For example, warmer climates may be associated with higher consumption of bottled beverages, potentially increasing plastic waste.
+
+```{r}
+#tour is only 10 countries
+# View(temp_data)
+# View(tour_data)
+```
+
+## Clean
+
+```{r}
+#| label: temp clean
+names(temp_data) <- make.names(names(temp_data), unique = TRUE)
+
+temp_data <- temp_data %>%
+  rename(country = `Countryor.region`) %>%
+  select(country, Temperature)
+
+```
+
+```{r}
+temp_data <- temp_data %>%
+  mutate(
+    Temperature = readr::parse_number(Temperature)
+  )
+```
+
+```{r}
+#| label: align names
+
+clean_names_fn <- function(df) {
+  df %>%
+    mutate(country = str_to_lower(country)) %>%
+    mutate(country = str_replace_all(country, "[[:punct:]]", "")) %>%
+    mutate(country = str_squish(country))
+}
+
+plastics_clean <- clean_names_fn(plastics)
+temp_clean     <- clean_names_fn(temp_data)
+wb_clean       <- clean_names_fn(wb_data)
+```
+
+```{r}
+# View(plastics_clean)
+# View(temp_clean)
+# View(wb_clean)
+```
+
+```{r}
+#| label: year to numeric
+plastics_clean <- plastics_clean %>%
+  mutate(year = as.numeric(year))
+
+wb_clean <- wb_clean %>%
+  mutate(year = as.numeric(year))
+```
+
+## Combined Data-sets
+
+```{r}
+#| label: merge plastic with wb
+plastics_wb <- plastics_clean %>%
+  inner_join(wb_clean, by = c("country", "year"))
+plastics_wb
+```
+
+```{r}
+#| label: wb with temp
+plastics_full <- plastics_wb %>%
+  inner_join(temp_clean, by = "country")
+plastics_full
+```
+
+## Two Summaries/Vis of new data
+
+```{r}
+#| label: plastic per person for each country
+plastic_per_capita <- plastics_full %>%
+  group_by(country, year) %>%
+  summarise(
+    total_plastic = sum(grand_total, na.rm = TRUE),
+    population = mean(population, na.rm = TRUE),
+    plastic_per_person = total_plastic / population,
+    .groups = "drop"
+  ) %>%
+  arrange(desc(plastic_per_person))%>%
+  slice_head(n = 20)
+
+
+table_per_capita <- plastic_per_capita |>
+  gt()
+
+table_per_capita <- table_per_capita |>
+  cols_label(
+    country = md("**Country**"),
+    year = md("**Year**"),
+    total_plastic = md("**Total Plastic**"),
+    population = md("**Population**"),
+    plastic_per_person = md("**Plastic per Person**")
+  ) |>
+  fmt_number(
+    columns = c(total_plastic, population),
+    decimals = 0
+  ) |>
+  fmt_number(
+    columns = plastic_per_person,
+    decimals = 5
+  ) |>
+  tab_header(
+    title = md("**Top 20 Countries by Plastic Contributed per Person**")
+  ) |>
+  tab_source_note(
+    source_note = "Plastic per person was calculated as total plastic collected divided by population."
+  )
+
+table_per_capita
+```
+
+```{r}
+#| label: Plastic vs GDP
+country_summary <- plastics_full %>%
+  group_by(country, year) %>%
+  summarise(
+    total_plastic = sum(grand_total, na.rm = TRUE),
+    gdp = mean(gdp, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+country_summary_filtered <- country_summary %>%
+  filter(total_plastic < quantile(total_plastic, 0.99, na.rm = TRUE))
+
+ggplot(country_summary_filtered, aes(x = gdp, y = total_plastic)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  scale_x_continuous(labels = scales::label_number(scale = 1e-9, suffix = "B")) +
+  labs(
+    title = "Total Plastic vs GDP by Country",
+    x = "GDP (Billions USD)",
+    y = "Total Plastic Collected"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+#| label: Plastic vs Temp
+temp_summary <- plastics_full %>%
+  group_by(country, year) %>%
+  summarise(
+    total_plastic = sum(grand_total, na.rm = TRUE),
+    Temperature = mean(Temperature, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(temp_summary, aes(x = Temperature, y = total_plastic)) +
+  geom_point(alpha = 0.7, size = 2) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  labs(
+    title = "Total Plastic Collected vs Average Temperature by Country",
+    x = "Average Temperature (°C)",
+    y = "Total Plastic Collected"
+  ) +
+  theme_minimal()
+```
