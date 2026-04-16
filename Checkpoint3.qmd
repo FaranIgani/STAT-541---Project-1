@@ -99,27 +99,101 @@ The first supplemental dataset was obtained using the World Bank API through the
 
 ```{r}
 #| label: Webscraping, Wiki population
+#not multi page
 url <- "https://en.wikipedia.org/wiki/List_of_countries_by_average_yearly_temperature"
 
 temp_data <- read_html(url) %>%
   html_table(fill = TRUE)
 
 temp_data <- temp_data[[1]]
-
-#or
-# url <- "https://en.wikipedia.org/wiki/World_Tourism_rankings"
-# tour_data <- read_html(url) %>%
-#   html_table(fill = TRUE)
-# tour_data <- tour_data[[1]]  # first table (arrivals)
 ```
-
-The second supplemental dataset was obtained through web scraping from Wikipedia, specifically a table containing average annual temperatures by country. The data were extracted using the `rvest` package in R. This dataset provides environmental context by capturing climate conditions, which may influence patterns of plastic usage and waste accumulation. For example, warmer climates may be associated with higher consumption of bottled beverages, potentially increasing plastic waste.
 
 ```{r}
-#tour is only 10 countries
-# View(temp_data)
-# View(tour_data)
+#| label: Webscraping, Wiki population density
+
+scrape_density <- function(country_name, wiki_name) {
+  
+  url <- str_c("https://en.wikipedia.org/wiki/", wiki_name)
+  
+  out <- tryCatch({
+    page <- read_html(url)
+    
+    rows <- page %>%
+      html_elements("table.infobox tr")
+    
+    row_text <- rows %>% html_text2()
+    
+    density_idx <- str_which(row_text, regex("density", ignore_case = TRUE))
+    
+    if (length(density_idx) == 0) {
+      return(tibble(country = country_name, pop_density = NA_real_))
+    }
+    
+    density_row <- rows[density_idx[1]]
+    
+    cells <- density_row %>% html_elements("th, td") %>% html_text2()
+    
+    if (length(cells) < 2) {
+      return(tibble(country = country_name, pop_density = NA_real_))
+    }
+    
+    value <- parse_number(cells[length(cells)])
+    
+    tibble(country = country_name, pop_density = value)
+    
+  }, error = function(e) {
+    tibble(country = country_name, pop_density = NA_real_)
+  })
+  
+  out
+}
 ```
+
+```{r}
+#| label: mapping to countries in plastic data
+
+#normalize names
+plastics_clean <- plastics %>%
+  mutate(country = str_to_lower(country)) %>%
+  mutate(country = str_replace_all(country, "_", " ")) %>%
+  mutate(country = str_replace_all(country, "[()&]", "")) %>%
+  mutate(country = str_squish(country)) %>%
+  filter(country != "empty")
+
+
+countries <- plastics_clean %>%
+  distinct(country) %>%
+  mutate(
+    wiki_country = case_when(
+      country == "united states of america" ~ "United_States",
+      country == "hong kong" ~ "Hong_Kong",
+      country == "south africa" ~ "South_Africa",
+      country == "sri lanka" ~ "Sri_Lanka",
+      country == "cote divoire" ~ "Ivory_Coast",
+      country == "taiwan republic of china roc" ~ "Taiwan",
+      country == "taiwan_republic of china roc" ~ "Taiwan",
+      country == "united kingdom of great britain northern ireland" ~ "United_Kingdom",
+      country == "united kingdom of great britain & northern ireland" ~ "United_Kingdom",
+      country == "korea" ~ "South_Korea",
+      country == "cyprus" ~ "Cyprus",
+      country == "ecuador" ~ "Ecuador",
+      TRUE ~ str_replace_all(str_to_title(country), " ", "_")
+    )
+  )
+
+density_data <- map2_dfr(
+  countries$country,
+  countries$wiki_country,
+  scrape_density
+)
+```
+
+```{r}
+density_data %>%
+  arrange(desc(pop_density)) 
+```
+
+The web-scraped country-level dataset was collected from multiple Wikipedia country pages using iteration. For each country in the plastics dataset, a country-specific Wikipedia URL was constructed and scraped with rvest package. Population density values were extracted from each page’s infobox, then combined into a single country-level dataset. This approach satisfies the requirement of gathering data from a multi-page source using iteration.
 
 ## Clean
 
@@ -145,7 +219,7 @@ temp_data <- temp_data %>%
 
 clean_names_fn <- function(df) {
   df %>%
-    mutate(country = str_to_lower(country)) %>%
+    #mutate(country = str_to_lower(country)) %>%
     mutate(country = str_replace_all(country, "[[:punct:]]", "")) %>%
     mutate(country = str_squish(country))
 }
@@ -153,12 +227,6 @@ clean_names_fn <- function(df) {
 plastics_clean <- clean_names_fn(plastics)
 temp_clean     <- clean_names_fn(temp_data)
 wb_clean       <- clean_names_fn(wb_data)
-```
-
-```{r}
-# View(plastics_clean)
-# View(temp_clean)
-# View(wb_clean)
 ```
 
 ```{r}
@@ -183,6 +251,16 @@ plastics_wb
 #| label: wb with temp
 plastics_full <- plastics_wb %>%
   inner_join(temp_clean, by = "country")
+plastics_full
+```
+
+```{r}
+#| label: Full with pop density
+density_data <- density_data %>%
+  mutate(country = str_to_title(country))
+
+plastics_full <- plastics_full %>%
+  inner_join(density_data, by = "country")
 plastics_full
 ```
 
@@ -259,10 +337,10 @@ ggplot(country_summary_filtered, aes(x = gdp, y = total_plastic)) +
 ```{r}
 #| label: Plastic vs Temp
 temp_summary <- plastics_full %>%
-  group_by(country, year) %>%
+  group_by(country, population) %>%
   summarise(
     total_plastic = sum(grand_total, na.rm = TRUE),
-    Temperature = mean(Temperature, na.rm = TRUE),
+    population = mean(Temperature, na.rm = TRUE),
     .groups = "drop"
   )
 
@@ -272,6 +350,27 @@ ggplot(temp_summary, aes(x = Temperature, y = total_plastic)) +
   labs(
     title = "Total Plastic Collected vs Average Temperature by Country",
     x = "Average Temperature (°C)",
+    y = "Total Plastic Collected"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+density_summary <- plastics_full %>%
+  group_by(country, year) %>%
+  summarise(
+    total_plastic = sum(grand_total, na.rm = TRUE),
+    pop_density = mean(pop_density, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  filter(pop_density < quantile(pop_density, 0.99, na.rm = TRUE))
+
+ggplot(density_summary, aes(x = pop_density, y = total_plastic)) +
+  geom_point(alpha = 0.7, size = 2) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  labs(
+    title = "Total Plastic  vs Population Density by Country",
+    x = "Population Density",
     y = "Total Plastic Collected"
   ) +
   theme_minimal()
