@@ -219,7 +219,7 @@ temp_data <- temp_data %>%
 
 clean_names_fn <- function(df) {
   df %>%
-    #mutate(country = str_to_lower(country)) %>%
+  # mutate(country = str_to_lower(country)) %>%
     mutate(country = str_replace_all(country, "[[:punct:]]", "")) %>%
     mutate(country = str_squish(country))
 }
@@ -227,6 +227,9 @@ clean_names_fn <- function(df) {
 plastics_clean <- clean_names_fn(plastics)
 temp_clean     <- clean_names_fn(temp_data)
 wb_clean       <- clean_names_fn(wb_data)
+
+density_data <- density_data %>%
+  mutate(country = str_to_title(country))
 ```
 
 ```{r}
@@ -256,8 +259,6 @@ plastics_full
 
 ```{r}
 #| label: Full with pop density
-density_data <- density_data %>%
-  mutate(country = str_to_title(country))
 
 plastics_full <- plastics_full %>%
   inner_join(density_data, by = "country")
@@ -337,10 +338,10 @@ ggplot(country_summary_filtered, aes(x = gdp, y = total_plastic)) +
 ```{r}
 #| label: Plastic vs Temp
 temp_summary <- plastics_full %>%
-  group_by(country, population) %>%
+  group_by(country, year) %>%
   summarise(
     total_plastic = sum(grand_total, na.rm = TRUE),
-    population = mean(Temperature, na.rm = TRUE),
+    Temperature = mean(Temperature, na.rm = TRUE),
     .groups = "drop"
   )
 
@@ -348,7 +349,7 @@ ggplot(temp_summary, aes(x = Temperature, y = total_plastic)) +
   geom_point(alpha = 0.7, size = 2) +
   geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
   labs(
-    title = "Total Plastic Collected vs Average Temperature by Country",
+    title = "Total Plastic vs Average Temperature by Country",
     x = "Average Temperature (°C)",
     y = "Total Plastic Collected"
   ) +
@@ -369,7 +370,7 @@ ggplot(density_summary, aes(x = pop_density, y = total_plastic)) +
   geom_point(alpha = 0.7, size = 2) +
   geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
   labs(
-    title = "Total Plastic  vs Population Density by Country",
+    title = "Total Plastic vs Population Density by Country",
     x = "Population Density",
     y = "Total Plastic Collected"
   ) +
