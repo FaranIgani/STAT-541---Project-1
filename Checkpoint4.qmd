@@ -405,6 +405,7 @@ ggplot(density_summary, aes(x = pop_density, y = total_plastic)) +
 
 joined_all %>%
   filter(!is.na(region)) %>% 
+  filter(!is.na(region), region != "Oceania") %>% 
   group_by(country, region) %>%
   summarise(
     total = sum(grand_total, na.rm = TRUE),
@@ -417,6 +418,44 @@ joined_all %>%
   labs(
     title = "Distribution of Total Plastic Waste by Region",
     subtitle = "Country-level totals aggregated within each region",
+    x = "Total Plastic Collected",
+    y = "Region"
+  ) +
+  theme_light(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(size = 11),
+    axis.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+```
+
+**Visual 4.5**
+
+```{r}
+#| label: Total plastic waste by region (ridge)
+#| fig-cap: "Density ridge plot showing the distribution of total plastic collected across regions. Each ridge represents the distribution of country-level plastic totals within a region."
+
+joined_all %>%
+  filter(!is.na(region)) %>% 
+  filter(!is.na(region), region != "Oceania") %>% 
+  group_by(country, region) %>%
+  summarise(
+    total = sum(grand_total, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% 
+  mutate(region = fct_reorder(region, total, .fun = median)) %>%
+  ggplot(aes(x = total, y = region, fill = region)) +
+  geom_density_ridges(
+    alpha = 0.8,
+    scale = 1.2,
+    color = "white",
+    rel_min_height = 0.01
+  ) +
+  scale_fill_brewer(palette = "Reds", guide = "none") +
+  labs(
+    title = "Distribution of Total Plastic Waste by Region",
+    subtitle = "Density of country-level totals within each region",
     x = "Total Plastic Collected",
     y = "Region"
   ) +
