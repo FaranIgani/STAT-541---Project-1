@@ -24,6 +24,7 @@ library(httr2)
 library(jsonlite)
 library(httr)
 library(glue)
+library(ggridges)
 ```
 
 ```{r}
@@ -286,7 +287,7 @@ joined_all <- joined2 %>%
   left_join(density_data, by = "country_key")
 ```
 
-## 2 Visuals 1 Model Fit:
+## Visuals
 
 ```{r}
 library(tidyverse)
@@ -312,201 +313,96 @@ country_year <- joined_all %>%
 **Visual 1**
 
 ```{r}
-library(ggplot2)
-library(hexbin)
-library(scales)
-#| fig-cap: "Hexbin plot showing the relationship between GDP and total plastic collected across country-year observations. Darker hexagons indicate more observations concentrated in that area. Most countries cluster at lower GDP values, with plastic totals varying widely."
+#| fig-alt: "A ridgeline density plot showing the distribution of total plastic waste per country, separated by continent. Americas has the highest peak near zero with a moderate right tail. Asia has a flatter distribution with several secondary peaks at high waste values representing individual countries producing high waste. Africa is multimodal. Europe is concentrated near zero with one outlier peak. All distributions are right-skewed."
+#| fig-cap: "Density ridge plot showing the distribution of total plastic collected across regions. Each ridge represents the distribution of country-level plastic totals within a region."
 
-ggplot(country_year, aes(x = gdp, y = total_plastic)) +
-  geom_hex(bins = 20) +
-  scale_x_log10(labels = label_number(scale = 1e-9, suffix = "B")) +
-  scale_fill_gradient(low = "#cfe8f3", high = "#045a8d", name = "Count") +
+vis_1 <- joined_all %>%
+  filter(!is.na(region), region != "Oceania") %>% 
+  group_by(country, region) %>%
+  summarize(
+    total = sum(grand_total, na.rm = TRUE), .groups = "drop"
+  ) %>% 
+  mutate(
+    region = fct_reorder(region, total, .desc = TRUE)
+  ) %>% 
+  ggplot(aes(x=total, y=region, fill=region)) +
+  geom_density_ridges(alpha = 0.5, height = 1, position = "identity") +
   labs(
-    title = "Plastic Waste and GDP by Country",
-    subtitle = "Each hexagon shows the concentration of country-year observations",
-    x = "GDP (Billions USD, log scale)",
-    y = "Total Plastic Waste"
+    title = "Total Plastic Waste by Continent",
+    subtitle = "Distribution of Total Plastic Waste by Continent (in Pieces)",
+    x= "Total Plastic Waste",
+    y= ""
   ) +
-  theme_light(base_size = 15)
+  scale_fill_brewer(palette = "Pastel1") +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+vis_1
 ```
 
 **Visual 2**
 
 ```{r}
-#| fig-cap: "Heatmap showing average plastic collected by region in 2019 and 2020. Darker cells indicate regions with higher average plastic totals."
-region_year <- country_year %>%
-  group_by(region, year) %>%
-  summarise(
-    avg_plastic = mean(total_plastic, na.rm = TRUE),
-    .groups = "drop"
-  )
+#| fig-alt: "A ridgeline density plot showing the distribution of plastic waste per capita in pieces per person by continent, with four ridges for Europe, Americas, Asia, and Africa. All distributions are right-skewed and peak near zero plastic items recorded per person. Europe has the widest spread with several secondary peaks and one extreme outlier. Asia also has an extreme outlier at 0.010 pieces of plastic per capita. Africa is the most concentrated near zero with a slightly wider base than the others."
+#| fig-cap: " "
 
-ggplot(region_year, aes(x = factor(year), y = region, fill = avg_plastic)) +
-  geom_tile(color = "white", linewidth = 0.5) +
-  scale_fill_gradient(low = "#fee5d9", high = "#de2d26", name = "Avg Plastic") +
+vis_1.5 <- joined_all %>%
+  filter(!is.na(region), region != "Oceania") %>% 
+  group_by(country, region, population) %>%
+  summarize(
+    total = sum(grand_total, na.rm = TRUE), .groups = "drop"
+  ) %>% 
+  mutate(
+    region = fct_reorder(region, total, .desc = TRUE),
+    waste_per_capita = total/population
+  ) %>% 
+  ggplot(aes(x=waste_per_capita, y=region, fill=region)) +
+  geom_density_ridges(alpha = 0.5, height = 1, position = "identity") +
   labs(
-    title = "Average Plastic Collected by Region and Year",
-    x = "Year",
-    y = "Region"
+    title = "Plastic Waste per Capita by Continent",
+    subtitle = "Distribution of Plastic Waste per Capita by Continent (in Pieces/Person)",
+    x= "Plastic Waste Per Capita",
+    y= ""
   ) +
-  theme_minimal(base_size = 15)
+  scale_fill_brewer(palette = "Pastel1") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+vis_1.5
 ```
 
 **Visual 3**
 
 ```{r}
-#| label: Total plastic vs population density
-#| fig-cap: "Scatterplot showing the relationship between population density and total plastic collected across country-year observations. The fitted regression line summarizes the overall trend after removing extreme population density outliers."
-
-
-density_summary <- joined_all %>%
-  group_by(country, year) %>%
-  summarise(
-    total_plastic = sum(grand_total, na.rm = TRUE),
-    pop_density = mean(pop_density, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  filter(pop_density < quantile(pop_density, 0.99, na.rm = TRUE))
-
-ggplot(density_summary, aes(x = pop_density, y = total_plastic)) +
-  geom_point(
-    color = "#c44e52",
-    alpha = 0.7,
-    size = 2
-  ) +
-  geom_smooth(
-    method = "lm",
-    formula = y ~ x,
-    se = TRUE,
-    color = "#7f0000",
-    linewidth = 1
-  ) +
-  scale_x_log10() +
-  labs(
-    title = "Total Plastic Collected vs Population Density",
-    subtitle = "Country-year observations with extreme population density outliers removed",
-    x = "Population Density (log scale)",
-    y = "Total Plastic Collected"
-  ) +
-  theme_light(base_size = 15) +
-  theme(
-    plot.title = element_text(face = "bold"),
-    plot.subtitle = element_text(size = 11),
-    axis.title = element_text(face = "bold"),
-    panel.grid.minor = element_blank()
-  )
-```
-
-**Visual** 4
-
-```{r}
-#| label: Total plastic waste by region
-#| fig-cap: "Boxplot showing the distribution of total plastic collected across regions. Each box represents the spread of country-level totals within a region, highlighting variation in plastic waste across different parts of the world."
-
-joined_all %>%
-  filter(!is.na(region)) %>% 
-  filter(!is.na(region), region != "Oceania") %>% 
-  group_by(country, region) %>%
-  summarise(
-    total = sum(grand_total, na.rm = TRUE),
-    .groups = "drop"
-  ) %>% 
-  mutate(region = fct_reorder(region, total, .fun = median)) %>%
-  ggplot(aes(x = total, y = region, fill = region)) +
-  geom_boxplot(alpha = 0.8, outlier.alpha = 0.4) +
-  scale_fill_brewer(palette = "Reds", guide = "none") +
-  labs(
-    title = "Distribution of Total Plastic Waste by Region",
-    subtitle = "Country-level totals aggregated within each region",
-    x = "Total Plastic Collected",
-    y = "Region"
-  ) +
-  theme_light(base_size = 13) +
-  theme(
-    plot.title = element_text(face = "bold"),
-    plot.subtitle = element_text(size = 11),
-    axis.title = element_text(face = "bold"),
-    panel.grid.minor = element_blank()
-  )
-```
-
-**Visual 4.5**
-
-```{r}
-#| label: Total plastic waste by region (ridge)
-#| fig-cap: "Density ridge plot showing the distribution of total plastic collected across regions. Each ridge represents the distribution of country-level plastic totals within a region."
-
-joined_all %>%
-  filter(!is.na(region)) %>% 
-  filter(!is.na(region), region != "Oceania") %>% 
-  group_by(country, region) %>%
-  summarise(
-    total = sum(grand_total, na.rm = TRUE),
-    .groups = "drop"
-  ) %>% 
-  mutate(region = fct_reorder(region, total, .fun = median)) %>%
-  ggplot(aes(x = total, y = region, fill = region)) +
-  geom_density_ridges(
-    alpha = 0.8,
-    scale = 1.2,
-    color = "white",
-    rel_min_height = 0.01
-  ) +
-  scale_fill_brewer(palette = "Reds", guide = "none") +
-  labs(
-    title = "Distribution of Total Plastic Waste by Region",
-    subtitle = "Density of country-level totals within each region",
-    x = "Total Plastic Collected",
-    y = "Region"
-  ) +
-  theme_light(base_size = 13) +
-  theme(
-    plot.title = element_text(face = "bold"),
-    plot.subtitle = element_text(size = 11),
-    axis.title = element_text(face = "bold"),
-    panel.grid.minor = element_blank()
-  )
-```
-
-**Visual 5**
-
-```{r}
-#| label: Plastic waste vs GDP per capita
+#| fig-alt: "A scatterplot comparing recorded plastic waste on the y-axis against GDP per capita on the x-axis, with points colored by continent. The majority of points are clustered near zero on both axes. One African country is a strong outlier with approximately 165,000 units of plastic waste recorded despite a very low GDP per capita below 5,000. Several Asian and Americas countries also show elevated waste counts at low GDP levels. European countries are spread across the full GDP per capita range but generally show low waste counts. No clear positive or negative relationship between GDP per capita and plastic waste is visible across the full dataset."
 #| fig-cap: "Scatterplot showing the relationship between GDP per capita and total plastic collected across countries. Points are colored by region to highlight geographic differences."
 
-library(scales)
-
-joined2 %>% 
-  filter(!is.na(region), !is.na(gdppercapita)) %>% 
+vis_2 <- joined_all %>% 
   group_by(country, gdppercapita, region) %>% 
-  summarise(
+  summarize(
     total = sum(grand_total, na.rm = TRUE),
     .groups = "drop"
   ) %>% 
-  ggplot(aes(x = gdppercapita, y = total, color = region)) +
-  geom_point(alpha = 0.9, size = 2) +
-  scale_x_log10(labels = label_dollar(scale = 1e-3, suffix = "K")) +
-  scale_color_brewer(palette = "Set2", name = "Region") +
+  ggplot(aes(x = gdppercapita, y = total, colour = region)) +
+  geom_point() +
   labs(
-    title = "Total Plastic Waste vs GDP per Capita",
-    subtitle = "Country-level totals with regional grouping",
-    x = "GDP per Capita (log scale)",
-    y = "Total Plastic Collected"
+    title = "Plastic Waste Per Capita",
+    x= "GDP per Capita",
+    y= "Total Recorded Plastic Waste"
   ) +
-  theme_light(base_size = 15) +
-  theme(
-    plot.title = element_text(face = "bold"),
-    plot.subtitle = element_text(size = 11),
-    axis.title = element_text(face = "bold"),
-    panel.grid.minor = element_blank(),
-  )
+  ylim(c(0,180000)) +
+  theme_minimal()
+
+vis_2
 ```
 
-**Visual 6**
+**Visual 4**
 
 ```{r}
 #| label: Top companies by region
 #| fig-cap: "Bar chart showing the parent companies with the highest total recorded plastic waste, grouped by region."
+#| fig-alt: "Faceted bar chart showing the top five parent companies contributing to plastic waste within each region (Africa, Americas, Asia, and Europe). In all regions, 'Unbranded' plastic dominates by a large margin, especially in Asia where it far exceeds other companies. Named companies such as The Coca-Cola Company, Nestle, and Unilever appear across multiple regions but contribute substantially less than unbranded sources. Overall, the distribution is highly skewed, with a single dominant category in each region and relatively small contributions from the remaining companies."
 
 top_companies_region <- joined_all %>%
   filter(
@@ -545,13 +441,7 @@ ggplot(top_companies_region,
   )
 ```
 
-**Visual 7**
-
-```{r}
-
-```
-
-**Statistical Model: Does GDP, Population density, and tempuertae contribute to Total Plastic Waste**
+**Statistical Model**
 
 ```{r}
 model_data <- country_year %>%
