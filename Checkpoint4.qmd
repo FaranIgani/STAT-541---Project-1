@@ -433,16 +433,18 @@ ggplot(top_companies_region,
     labels = scales::label_number(scale = 1e-3, suffix = "K")
   ) +
   labs(
-    title = "Top Parent Companies by Region",
+    title = "Top Parent Companies in Plastic Waste by Region",
     subtitle = "Top 5 companies with the highest recorded plastic waste in each region",
     x = "Total Plastic Collected",
-    y = "Parent Company"
+    y = ""
   ) +
+  scale_fill_brewer(palette = "Dark2") +
   theme(
     plot.title = element_text(face = "bold"),
     plot.subtitle = element_text(size = 11),
     panel.grid.minor = element_blank()
-  )
+  ) +
+  theme_light()
 ```
 
 **Statistical Model**
