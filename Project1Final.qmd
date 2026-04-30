@@ -3,6 +3,7 @@ title: "Project 1 Final Deliverable"
 author: "Faran Igani and Tyler Stoen"
 format:
   html:
+    theme: cosmo
     embed-resources: true
 editor: visual
 code-tools: true
